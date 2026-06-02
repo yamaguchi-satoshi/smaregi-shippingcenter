@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スマレジ一括入出荷管理</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    
+    <style>
+        body { font-family: sans-serif; margin: 0; background-color: #f4f6f9; color: #333; text-align: center; padding-bottom: 20px; }
+        h1 { font-size: 1.2rem; margin: 0; color: white; font-weight: bold; }
+        #reader { margin: 15px auto; max-width: 400px; border: 2px solid #ccc; border-radius: 12px; overflow: hidden; background: #fff; }
+        
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); box-sizing: border-box; }
+        
+        /* ログイン画面のスタイル */
+        #login-screen { padding: 30px 20px; margin-top: 30px; }
+        #login-screen h2 { font-size: 1.4rem; margin-bottom: 10px; color: #007bff; }
+        .login-desc { font-size: 0.9rem; color: #666; margin-bottom: 25px; line-height: 1.4; }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        .input-group label { display: block; font-size: 0.85rem; font-weight: bold; color: #444; margin-bottom: 6px; }
+        .login-input, .login-select { width: 100%; padding: 12px; font-size: 1.1rem; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-weight: bold; }
+        .login-input:focus, .login-select:focus { border-color: #007bff; outline: none; }
+        .btn-login { width: 100%; background-color: #007bff; color: white; padding: 14px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        
+        /* アプリ用のスタイリッシュなヘッダーバー */
+        .app-header { background-color: #007bff; color: white; display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .menu-trigger-btn { background: none; border: none; color: white; font-size: 1.6rem; cursor: pointer; padding: 0 5px; line-height: 1; font-weight: bold; }
+        
+        /* 右上のドロップダウンメニュー */
+        .dropdown-menu { display: none; position: absolute; top: 48px; right: 10px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); width: 240px; z-index: 200; border: 1px solid #eee; overflow: hidden; }
+        .dropdown-menu button { display: block; width: 100%; background: none; border: none; padding: 12px 15px; text-align: left; font-size: 0.95rem; font-weight: bold; color: #333; cursor: pointer; box-sizing: border-box; border-bottom: 1px solid #f5f5f5; }
+        .dropdown-menu button:last-child { border-bottom: none; }
+        .dropdown-menu button:active { background-color: #f8f9fa; }
+        .dropdown-menu button:disabled { color: #ccc; cursor: not-allowed; background-color: #fafafa; }
+
+        /* ミニステータスバー */
+        .status-bar-mini { display: flex; justify-content: center; gap: 15px; background: #e9ecef; padding: 6px 12px; font-size: 0.75rem; color: #495057; font-weight: bold; border-bottom: 1px solid #dee2e6; }
+        .status-account { color: #007bff; }
+
+        #app-screen { display: none; }
+        .action-group { background: #fff; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #e0e0e0; }
+        .total-count { font-size: 1.2rem; font-weight: bold; margin-bottom: 12px; color: #007bff; text-align: center; }
+        .btn-finish { display: block; width: 100%; background-color: #007bff; padding: 16px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 6px; color: white; cursor: pointer; box-sizing: border-box; text-align: center; }
+        .btn-finish:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        /* 下から浮き出るメニュー */
+        .modal-overlay { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: flex-end; }
+        .modal-sheet { background-color: #fff; padding: 20px; border-radius: 16px 16px 0 0; width: 100%; max-width: 500px; box-sizing: border-box; text-align: left; animation: slideUp 0.25s ease-out; max-height: 80%; overflow-y: auto; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        
+        .modal-sheet h3 { margin-top: 0; font-size: 1.1rem; color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 12px; text-align: center; }
+        .menu-item { display: flex; align-items: center; width: 100%; padding: 12px 15px; font-size: 1rem; font-weight: bold; text-align: left; border: none; border-radius: 8px; margin-bottom: 10px; cursor: pointer; box-sizing: border-box; background-color: #f8f9fa; color: #333; transition: background 0.2s; }
+        .menu-item:active { background-color: #e9ecef; }
+        .menu-icon { width: 24px; height: 24px; margin-right: 12px; vertical-align: middle; object-fit: contain; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        
+        .color-receive { border-left: 5px solid #28a745; }
+        .color-ship { border-left: 5px solid #dc3545; }
+        .color-sheet { border-left: 5px solid #28a745; }
+        .color-csv { border-left: 5px solid #007bff; }
+        .btn-close { background-color: #6c757d; color: white; text-align: center; margin-top: 15px; margin-bottom: 0; justify-content: center; }
+
+        /* 中央に浮かぶダイアログ */
+        .modal-center { align-items: center; justify-content: center; }
+        .modal-dialog { border-radius: 16px; max-width: 340px; text-align: center; margin-bottom: 0; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
+        .dialog-sheet-badge { display: inline-block; background-color: #f1f3f4; color: #5f6368; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-bottom: 10px; max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal-dialog p { font-size: 0.9rem; color: #333; margin-bottom: 15px; line-height: 1.4; font-weight: bold; }
+        
+        .dialog-input-box { display: none; margin-bottom: 15px; text-align: left; background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
+        .dialog-input-box label { display: block; font-size: 0.8rem; font-weight: bold; color: #555; margin-bottom: 4px; }
+
+        .dialog-btn { display: block; width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border: none; border-radius: 8px; color: white; cursor: pointer; margin-bottom: 10px; box-sizing: border-box; text-align: center; }
+        .dialog-btn:last-child { margin-bottom: 0; }
+
+        /* テーブル */
+        .history-title { text-align: left; font-size: 1rem; font-weight: bold; margin: 15px 0 5px; color: #555; }
+        table { width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; text-align: left; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; }
+        th { background-color: #f8f9fa; color: #666; }
+        .btn-delete { background-color: #ffc107; color: #333; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; font-size: 0.9rem; }
+        .btn-page { padding: 5px 10px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; }
+        .btn-page:disabled { opacity: 0.4; cursor: not-allowed; }
+    </style>
+</head>
+<body onclick="closeTopMenuOutside(event)">
+
+    <div id="login-screen" class="container">
+        <h2>スマレジ一括入出荷管理</h2>
+        <p class="login-desc">アプリを利用するには、スマレジの「契約ID」を入力してください。</p>
+        
+        <div id="login-step-a">
+            <div class="input-group">
+                <label for="contract-id">契約ID（Contract ID）</label>
+                <input type="text" id="contract-id" class="login-input" placeholder="例: sb_a123456" autocomplete="off">
+            </div>
+            <button class="btn-login" onclick="fetchStoreList()">次へ（店舗マスタを読込）</button>
+        </div>
+
+        <div id="login-step-b" style="display:none; margin-top: 15px;">
+            <div class="input-group">
+                <label for="store-select">作業する店舗を選択してください</label>
+                <select id="store-select" class="login-select"></select>
+            </div>
+            <button class="btn-login" style="background-color: #28a745;" onclick="handleLoginComplete()">店舗を確定してアプリを起動</button>
+        </div>
+    </div>
+
+    <div id="app-screen">
+        <div class="app-header">
+            <div style="width: 30px;"></div>
+            <h1>一括入出荷管理</h1>
+            <button id="menu-trigger" class="menu-trigger-btn" onclick="toggleTopMenu(event)">⋮</button>
+            
+            <div id="top-dropdown-menu" class="dropdown-menu">
+                <button onclick="menuClearData()">🧹 スキャン内容をクリア</button>
+                <button id="menu-sheet-btn" onclick="menuOpenSheet()" disabled>📊 保存先スプレッドシート</button>
+                <button onclick="handleLogout()" style="color: #dc3545; border-top: 1px solid #eee;">🚪 ログアウト</button>
+            </div>
+        </div>
+        
+        <div class="status-bar-mini">
+            <div>会社ID: <span id="display-contract-id" class="status-account">---</span></div>
+            <div>店舗: <span id="display-store-name" class="status-account">---</span></div>
+        </div>
+
+        <div id="reader"></div>
+        
+        <div class="container">
+            <div class="action-group">
+                <div class="total-count">現在のスキャン合計: <span id="total-qty">0</span> 件</div>
+                <button id="finish-btn" class="btn-finish" onclick="openMenu()" disabled>スキャンを完了する</button>
+            </div>
+            
+            <div class="history-title">スキャン履歴</div>
+            <table>
+                <thead><tr><th>時間</th><th>バーコード</th><th>操作</th></tr></thead>
+                <tbody id="history-list"></tbody>
+            </table>
+            
+            <div class="pagination">
+                <button id="prev-page" class="btn-page" onclick="changePage(-1)" disabled>前へ</button>
+                <span id="page-num">1 / 1</span>
+                <button id="next-page" class="btn-page" onclick="changePage(1)" disabled>次へ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="action-menu-overlay" class="modal-overlay" onclick="closeMenuOutside(event)">
+        <div class="modal-sheet">
+            <h3>処理方法を選択してください</h3>
+            <button class="menu-item color-receive" onclick="handleAction('入荷')"><span class="menu-icon">📥</span>一括入荷確定（スマレジ）</button>
+            <button class="menu-item color-ship" onclick="handleAction('出荷')"><span class="menu-icon">📤</span>一括出荷確定（スマレジ）</button>
+            <button class="menu-item color-sheet" onclick="handleAction('sheet')"><img src="スプレッドシート.png" alt="Sheets" class="menu-icon">Googleスプレッドシートへ書き出す</button>
+            <button class="menu-item color-csv" onclick="handleAction('csv')"><img src="csv.png" alt="CSV" class="menu-icon">CSVデータを他のアプリに共有する</button>
+            <button class="menu-item btn-close" onclick="closeMenu()">閉じる (スキャンに戻る)</button>
+        </div>
+    </div>
+
+    <div id="sheet-dialog-overlay" class="modal-overlay modal-center">
+        <div class="modal-sheet modal-dialog">
+            <div id="dialog-sheet-badge" class="dialog-sheet-badge">読み込み中...</div>
+            <h3 id="dialog-title">タイトル</h3>
+            <p id="dialog-desc">説明文</p>
+            
+            <div id="dialog-supplier-box" class="dialog-input-box">
+                <label id="supplier-label" for="supplier-select">選択してください</label>
+                <select id="supplier-select" class="login-select" style="font-size: 1rem; padding: 8px;"></select>
+            </div>
+
+            <div id="dialog-buttons-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const gasUrl = 'https://script.google.com/macros/s/AKfycbzanSAeMZe37AaefW0JoysdihDIjHTAJUTkJ_OD36KgPgHvvD-IAbPwc6FRsd1DHgzA/exec';
+        
+        let scannedItems = [];
+        let currentPage = 1;
+        const itemsPerPage = 10;
+        let lastScannedCode = "";
+        let lastScannedTime = 0;
+        let html5QrcodeScanner = null;
+        let tempContractId = "";
+        let currentSheetUrl = "";
+
+        window.onload = function() { checkLoginStatus(); };
+
+        function toggleTopMenu(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('top-dropdown-menu');
+            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        }
+        function closeTopMenuOutside(event) {
+            const menu = document.getElementById('top-dropdown-menu');
+            if (menu && event.target.id !== 'menu-trigger') { menu.style.display = 'none'; }
+        }
+        function menuClearData() {
+            if (scannedItems.length === 0) { alert("現在スキャンされたデータはありません。"); return; }
+            if (confirm("現在のスキャン履歴（" + scannedItems.length + "件）をすべて削除してよろしいですか？\n（スマレジやシートには影響しません）")) {
+                clearData(); alert("クリアしました。");
+            }
+        }
+        function menuOpenSheet() {
+            if (currentSheetUrl) { window.open(currentSheetUrl, '_blank'); }
+        }
+
+        function checkLoginStatus() {
+            const savedContractId = localStorage.getItem('smaregi_contract_id');
+            const savedStoreId = localStorage.getItem('smaregi_store_id');
+            const savedStoreName = localStorage.getItem('smaregi_store_name') || "未設定店舗";
+            
+            if (savedContractId && savedStoreId) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-screen').style.display = 'block';
+                document.getElementById('display-contract-id').innerText = savedContractId;
+                document.getElementById('display-store-name').innerText = savedStoreName;
+                
+                updateSheetLinkArea(savedContractId);
+                initScanner();
+                updateUI();
+            } else {
+                document.getElementById('login-screen').style.display = 'block';
+                document.getElementById('app-screen').style.display = 'none';
+                document.getElementById('login-step-a').style.display = 'block';
+                document.getElementById('login-step-b').style.display = 'none';
+                if (html5QrcodeScanner) { html5QrcodeScanner.clear(); html5QrcodeScanner = null; }
+            }
+        }
+
+        function fetchStoreList() {
+            const contractId = document.getElementById('contract-id').value.trim();
+            if (!contractId) { alert("契約IDを入力してください。"); return; }
+            tempContractId = contractId;
+            alert("スマレジから店舗一覧を取得しています。少々お待ちください...");
+
+            fetch(gasUrl, { method: "POST", body: JSON.stringify({ action: "get_stores", contractId: contractId }) })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status === "success" && Array.isArray(res.data)) {
+                    const select = document.getElementById('store-select');
+                    select.innerHTML = ""; 
+                    res.data.forEach(store => {
+                        const opt = document.createElement('option');
+                        opt.value = store.storeId; opt.innerText = store.storeName;
+                        select.appendChild(opt);
+                    });
+                    document.getElementById('login-step-a').style.display = 'none';
+                    document.getElementById('login-step-b').style.display = 'block';
+                } else { alert("スマレジ通信エラーが発生しました。\n\n【理由】:\n" + (res.message || "データを受信できませんでした。")); }
+            }).catch(err => alert("通信エラー（GAS自体に届いていません）:\n" + err));
+        }
+
+        function handleLoginComplete() {
+            const select = document.getElementById('store-select');
+            const storeId = select.value;
+            const storeName = select.options[select.selectedIndex].text;
+            localStorage.setItem('smaregi_contract_id', tempContractId);
+            localStorage.setItem('smaregi_store_id', storeId);
+            localStorage.setItem('smaregi_store_name', storeName);
+            document.getElementById('contract-id').value = "";
+            checkLoginStatus();
+        }
+
+        function handleLogout() {
+            if (confirm("ログアウトしますか？\n（未送信のスキャン履歴は消去されます）")) {
+                localStorage.removeItem('smaregi_contract_id');
+                localStorage.removeItem('smaregi_store_id');
+                localStorage.removeItem('smaregi_store_name');
+                scannedItems = []; currentSheetUrl = ""; checkLoginStatus();
+            }
+        }
+
+        function updateSheetLinkArea(contractId) {
+            const savedUrl = localStorage.getItem(`user_automatic_sheet_url_${contractId}`);
+            const sheetBtn = document.getElementById('menu-sheet-btn');
+            if (savedUrl) {
+                currentSheetUrl = savedUrl;
+                sheetBtn.disabled = false;
+                sheetBtn.innerHTML = "📊 保存先スプレッドシートを開く";
+            } else {
+                currentSheetUrl = "";
+                sheetBtn.disabled = true;
+                sheetBtn.innerHTML = "📊 保存先スプレッドシート（未作成）";
+            }
+        }
+
+        function initScanner() {
+            if (!html5QrcodeScanner) {
+                html5QrcodeScanner = new Html5QrcodeScanner(
+                    "reader", { fps: 15, qrbox: { width: 280, height: 150 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128 ] }
+                );
+                html5QrcodeScanner.render(onScanSuccess);
+            }
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            const now = Date.now();
+            if (decodedText === lastScannedCode && (now - lastScannedTime) < 1500) return; 
+            lastScannedCode = decodedText; lastScannedTime = now;
+            const timeStr = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+            scannedItems.unshift({ id: now, code: decodedText, time: timeStr });
+            if (navigator.vibrate) { navigator.vibrate(100); }
+            currentPage = 1; updateUI();
+        }
+
+        function updateUI() {
+            if (!document.getElementById('total-qty')) return;
+            document.getElementById('total-qty').innerText = scannedItems.length;
+            document.getElementById('finish-btn').disabled = scannedItems.length === 0;
+            const totalPages = Math.ceil(scannedItems.length / itemsPerPage) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            document.getElementById('page-num').innerText = `${currentPage} / ${totalPages}`;
+            document.getElementById('prev-page').disabled = currentPage === 1;
+            document.getElementById('next-page').disabled = currentPage === totalPages;
+            
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageItems = scannedItems.slice(startIndex, endIndex);
+            const listBody = document.getElementById('history-list'); listBody.innerHTML = "";
+            
+            if (pageItems.length === 0) {
+                listBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#999;">データがありません</td></tr>`; return;
+            }
+            pageItems.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${item.time}</td><td style="font-weight:bold;">${item.code}</td><td><button class="btn-delete" onclick="deleteItem(${item.id})">削除</button></td>`;
+                listBody.appendChild(row);
+            });
+        }
+
+        function openMenu() { document.getElementById('action-menu-overlay').style.display = 'flex'; }
+        function closeMenu() { document.getElementById('action-menu-overlay').style.display = 'none'; }
+        function closeMenuOutside(event) { if (event.target.id === "action-menu-overlay") closeMenu(); }
+
+        function handleAction(actionType) {
+            closeMenu();
+            if (actionType === '入荷' || actionType === '出荷') {
+                openSmaregiConfirmDialog(actionType);
+            } else if (actionType === 'csv') { shareCSVText(); } else if (actionType === 'sheet') { submitToSpreadsheet(); }
+        }
+
+        function shareCSVText() {
+            if (scannedItems.length === 0) return;
+            if (!navigator.share) { alert("お使いのブラウザは共有機能に対応していません。"); return; }
+            let csvText = "スキャン時間,バーコード\n";
+            const exportItems = [...scannedItems].reverse();
+            exportItems.forEach(item => { csvText += `${item.time},${item.code}\n`; });
+            const shareMessage = `【一括スキャン・CSVデータ】\n契約ID: ${localStorage.getItem('smaregi_contract_id')}\n合計: ${scannedItems.length}件\n\n${csvText}`;
+            navigator.share({ title: 'バーコードCSVデータ', text: shareMessage })
+            .then(() => { if(confirm("データを共有しました！\nアプリ内のスキャン履歴をリセットしますか？")) { clearData(); } })
+            .catch(error => { console.log("共有がキャンセルされました", error); });
+        }
+
+        function openSmaregiConfirmDialog(actionType) {
+            const contractId = localStorage.getItem('smaregi_contract_id');
+            const storeName = localStorage.getItem('smaregi_store_name');
+            document.getElementById('dialog-supplier-box').style.display = "none";
+            
+            alert("スマレジから最新の仕入先リストを読み込んでいます...");
+            
+            fetch(gasUrl, { method: "POST", body: JSON.stringify({ action: "get_suppliers", contractId: contractId }) })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status === "success" && Array.isArray(res.data)) {
+                    const select = document.getElementById('supplier-select');
+                    select.innerHTML = "";
+                    
+                    const defaultOpt = document.createElement('option');
+                    defaultOpt.value = ""; defaultOpt.innerText = "-- 選択してください --";
+                    select.appendChild(defaultOpt);
+
+                    res.data.forEach(sup => {
+                        const opt = document.createElement('option');
+                        opt.value = sup.supplierId; opt.innerText = sup.supplierName;
+                        select.appendChild(opt);
+                    });
+                    
+                    document.getElementById('dialog-supplier-box').style.display = "block";
+                    
+                    if (actionType === '入荷') {
+                        document.getElementById('supplier-label').innerText = "仕入先名（マスタから自動取得）";
+                        renderDialog(
+                            "📥 スマレジ一括入荷確定",
+                            `スキャンデータ（${scannedItems.length}件）を【${storeName}】のスマレジ在庫へ反映します。仕入先を選択してください。`,
+                            `店舗：${storeName}`,
+                            [
+                                { text: "🚀 入荷を確定してスマレジへ送信", color: "#28a745", action: () => submitToSmaregiAPI('入荷') },
+                                { text: "キャンセル", color: "#6c757d", action: closeDialog }
+                            ]
+                        );
+                    } else {
+                        document.getElementById('supplier-label').innerText = "出荷先・返品先名（マスタから自動取得）";
+                        renderDialog(
+                            "📤 スマレジ一括出荷確定",
+                            `スキャンデータ（${scannedItems.length}件）を【${storeName}】のスマレジ在庫から差し引きます。出荷先（返品先）を選択してください。`,
+                            `店舗：${storeName}`,
+                            [
+                                { text: "🚀 出荷を確定してスマレジへ送信", color: "#dc3545", action: () => submitToSmaregiAPI('出荷') },
+                                { text: "キャンセル", color: "#6c757d", action: closeDialog }
+                            ]
+                        );
+                    }
+                } else { alert("仕入先マスタの取得に失敗しました。"); }
+            }).catch(err => alert("仕入先読込中に通信エラーが発生しました。"));
+        }
+
+        function submitToSmaregiAPI(actionType) {
+            const contractId = localStorage.getItem('smaregi_contract_id');
+            const storeId = localStorage.getItem('smaregi_store_id');
+            const storeName = localStorage.getItem('smaregi_store_name');
+            const savedSheetId = localStorage.getItem(`user_automatic_sheet_id_${contractId}`) || "new";
+            
+            const supplierId = document.getElementById('supplier-select').value;
+
+            if (!supplierId || supplierId === "") {
+                alert("⚠️仕入先（出荷先）が選択されていません。\nリストから正しい取引先を選んでください。");
+                return;
+            }
+
+            closeDialog();
+            alert(`スマレジAPIとリアルタイム通信中...\n【${storeName}】の在庫を書き換えています（数秒かかります）`);
+
+            const payload = {
+                action: "smaregi_update",
+                type: actionType,
+                contractId: contractId,
+                storeId: storeId,
+                supplierId: supplierId,
+                sheetId: savedSheetId, 
+                items: scannedItems
+            };
+
+            fetch(gasUrl, { method: "POST", body: JSON.stringify(payload) })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    localStorage.setItem(`user_automatic_sheet_id_${contractId}`, data.sheetId);
+                    localStorage.setItem(`user_automatic_sheet_name_${contractId}`, data.sheetName);
+                    localStorage.setItem(`user_automatic_sheet_url_${contractId}`, data.sheetUrl);
+                    updateSheetLinkArea(contractId);
+                    alert(`🎉スマレジ連動完了！\n\n店舗：${storeName} の在庫がリアルタイムに変更されました！\n（Googleスプレッドシートへの二重記録も完了しています）`);
+                    clearData();
+                } else { alert("⚠️スマレジAPIエラー:\n" + data.message); }
+            }).catch(err => alert("通信エラーが発生しました。"));
+        }
+
+        function submitToSpreadsheet() {
+            const currentContractId = localStorage.getItem('smaregi_contract_id');
+            const savedSheetId = localStorage.getItem(`user_automatic_sheet_id_${currentContractId}`);
+            const savedSheetName = localStorage.getItem(`user_automatic_sheet_name_${currentContractId}`) || "スマレジ入出荷管理データ";
+            document.getElementById('dialog-supplier-box').style.display = "none";
+
+            if (!savedSheetId) {
+                renderDialog(
+                    "🆕 新しく作成する", "まだ保存用のシートがありません。新しくスプレッドシートを作成しますか？", "新規作成予定",
+                    [
+                        { text: "🆕 新しく作成する", color: "#007bff", action: () => showDirectionSelection("new", "スマレジ入出荷管理データ") },
+                        { text: "キャンセル", color: "#6c757d", action: closeDialog }
+                    ]
+                );
+            } else { showDirectionSelection(savedSheetId, savedSheetName); }
+        }
+
+        function showDirectionSelection(sheetId, sheetName) {
+            document.getElementById('dialog-supplier-box').style.display = "none";
+            renderDialog(
+                "どちらのシート（タブ）に書き出しますか？", "スキャンデータを保存するタブを選択してください。", sheetName,
+                [
+                    { text: "📥 入荷確定シートへ書き出す", color: "#28a745", action: () => executeUpload(sheetId, "入荷") },
+                    { text: "📤 出荷確定シートへ書き出す", color: "#dc3545", action: () => executeUpload(sheetId, "出荷") },
+                    { text: "キャンセル", color: "#6c757d", action: closeDialog }
+                ]
+            );
+        }
+
+        function renderDialog(title, desc, sheetName, buttons) {
+            document.getElementById('dialog-title').innerText = title;
+            document.getElementById('dialog-desc').innerText = desc;
+            document.getElementById('dialog-sheet-badge').innerText = sheetName;
+            const container = document.getElementById('dialog-buttons-container'); container.innerHTML = ""; 
+            buttons.forEach(btn => {
+                const button = document.createElement('button'); button.innerText = btn.text; button.className = "dialog-btn";
+                button.style.backgroundColor = btn.color; button.onclick = btn.action; container.appendChild(button);
+            });
+            document.getElementById('sheet-dialog-overlay').style.display = 'flex';
+        }
+
+        function closeDialog() { document.getElementById('sheet-dialog-overlay').style.display = 'none'; }
+
+        function executeUpload(sheetId, actionType) {
+            closeDialog(); const currentContractId = localStorage.getItem('smaregi_contract_id'); alert("Googleスプレッドシートに送信中...");
+            fetch(gasUrl, { method: "POST", body: JSON.stringify({ action: actionType, sheetId: sheetId, contractId: currentContractId, items: scannedItems }) })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    localStorage.setItem(`user_automatic_sheet_id_${currentContractId}`, data.sheetId);
+                    localStorage.setItem(`user_automatic_sheet_name_${currentContractId}`, data.sheetName);
+                    localStorage.setItem(`user_automatic_sheet_url_${currentContractId}`, data.sheetUrl);
+                    updateSheetLinkArea(currentContractId);
+                    alert("スプレッドシートへのデータ追加が完了しました！"); clearData();
+                } else { alert("エラー: " + data.message); }
+            }).catch(err => alert("通信エラーが発生しました。"));
+        }
+
+        function clearData() { scannedItems = []; currentPage = 1; updateUI(); }
+        function deleteItem(id) { scannedItems = scannedItems.filter(item => item.id !== id); updateUI(); }
+        function changePage(direction) { currentPage += direction; updateUI(); }
+    </script>
+</body>
+</html>
