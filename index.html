@@ -9,7 +9,7 @@
     <style>
         body { font-family: sans-serif; margin: 0; background-color: #f4f6f9; color: #333; text-align: center; padding-bottom: 20px; }
         h1 { font-size: 1.2rem; margin: 0; color: white; font-weight: bold; }
-        #reader { margin: 15px auto; max-width: 400px; border: 2px solid #ccc; border-radius: 12px; overflow: hidden; background: #fff; }
+        #reader { margin: 15px auto 5px; max-width: 400px; border: 2px solid #ccc; border-radius: 12px; overflow: hidden; background: #fff; }
         
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); box-sizing: border-box; }
         
@@ -126,6 +126,10 @@
 
         <div id="reader"></div>
         
+        <div style="margin: -5px auto 15px; max-width: 400px; text-align: right;">
+            <button id="btn-toggle-camera" style="padding: 6px 14px; font-weight: bold; background: #6c757d; color: white; border: none; border-radius: 20px; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" onclick="switchCamera()">🔄 カメラを前面に切り替え</button>
+        </div>
+        
         <div class="container">
             <div class="action-group">
                 <div class="total-count">現在のスキャン合計: <span id="total-qty">0</span> 件</div>
@@ -180,7 +184,8 @@
         const itemsPerPage = 10;
         let lastScannedCode = "";
         let lastScannedTime = 0;
-        let html5QrcodeScanner = null;
+        let html5QrCode = null; // 🌟カスタムスキャナー用
+        let currentFacingMode = "environment"; // 🌟初期値は「背面（environment）」
         let tempContractId = "";
         let currentSheetUrl = "";
 
@@ -224,7 +229,11 @@
                 document.getElementById('app-screen').style.display = 'none';
                 document.getElementById('login-step-a').style.display = 'block';
                 document.getElementById('login-step-b').style.display = 'none';
-                if (html5QrcodeScanner) { html5QrcodeScanner.clear(); html5QrcodeScanner = null; }
+                
+                // 🚪ログアウト時はカメラを完全に止める
+                if (html5QrCode && html5QrCode.isScanning) {
+                    html5QrCode.stop().catch(err => console.error(err));
+                }
             }
         }
 
@@ -267,7 +276,13 @@
                 localStorage.removeItem('smaregi_contract_id');
                 localStorage.removeItem('smaregi_store_id');
                 localStorage.removeItem('smaregi_store_name');
-                scannedItems = []; currentSheetUrl = ""; checkLoginStatus();
+                scannedItems = []; currentSheetUrl = "";
+                
+                if (html5QrCode && html5QrCode.isScanning) {
+                    html5QrCode.stop().then(() => { checkLoginStatus(); }).catch(err => { checkLoginStatus(); });
+                } else {
+                    checkLoginStatus();
+                }
             }
         }
 
@@ -285,12 +300,53 @@
             }
         }
 
+        // 🌟【大進化】余計な文字やプルダウンを一切出さない、プロ仕様のカメラ起動ロジック
         function initScanner() {
-            if (!html5QrcodeScanner) {
-                html5QrcodeScanner = new Html5QrcodeScanner(
-                    "reader", { fps: 15, qrbox: { width: 280, height: 150 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128 ] }
-                );
-                html5QrcodeScanner.render(onScanSuccess);
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => { startScanner(); }).catch(err => console.error(err));
+            } else {
+                startScanner();
+            }
+        }
+
+        function startScanner() {
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 280, height: 150 },
+                formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128 ]
+            };
+            
+            // 指定した向き（背面 or 前面）だけでカメラをダイレクトに起動！
+            html5QrCode.start(
+                { facingMode: currentFacingMode }, 
+                config,
+                (decodedText, decodedResult) => { onScanSuccess(decodedText, decodedResult); },
+                (errorMessage) => { /* 読み取りエラーは無視 */ }
+            ).catch(err => {
+                console.error("カメラ起動エラー:", err);
+                alert("カメラの起動に失敗しました。ブラウザのカメラ権限が許可されているか確認してください。");
+            });
+        }
+
+        // 🌟【新設】ボタンを押した時に「前面」「背面」の2択だけで切り替える関数
+        function switchCamera() {
+            if (!html5QrCode) return;
+            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+            
+            const btn = document.getElementById('btn-toggle-camera');
+            if (currentFacingMode === "environment") {
+                btn.innerText = "🔄 カメラを前面に切り替え";
+                btn.style.backgroundColor = "#6c757d";
+            } else {
+                btn.innerText = "🔄 カメラを背面に切り替え";
+                btn.style.backgroundColor = "#007bff";
+            }
+
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => { startScanner(); }).catch(err => console.error(err));
             }
         }
 
